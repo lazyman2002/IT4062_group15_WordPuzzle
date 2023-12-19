@@ -9,37 +9,40 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-int PORT; /* Port that will be opened */
-#define BUFF_SIZE 16000
+#define BUFF_SIZE 2047
 #define BACKLOG 2
-char buff[BUFF_SIZE];
-int thread_status[BACKLOG] = {0};
-char *MSGC[] = {"MSGC01", "MSGC02", "MSGC3", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11"};
-char *MSGS[] = {"MSGS01", "MSGS02", "MSGS3", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11"};
 
-typedef struct{
-	char challengerID[1000];
-	char challengedID[1000];
-	char result[1000];
-	int roomID;
-} challangeData;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+int PORT; /* Port that will be opened */
+char buff[BUFF_SIZE], buffTemp[BUFF_SIZE];
+int thread_status[BACKLOG] = {0};
+char *MSGC[] = {"MSGC01", "MSGC02", "MSGC03", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11"};
+char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11"};
 
 typedef struct
 {
-	struct sockaddr_in sockaddr;
+	int session;
+	int conn_sock;
 	char name[1000];
 	char password[1000];
 	char status;
 	char login_status;
 	int wrong_password_count;
 	struct account *next;
-	int session;
-	int conn_sock;
 } account;
 
+typedef struct{
+	int roomStatus;	//0: phòng trống, 1: phòng bận
+	int player1Session;
+	int player2Session;
+	int playerTurn; //0: player1, 1: player2
+
+} challangeData;
+
 account *list = NULL;
-challangeData li[BACKLOG];
+account *logging[BACKLOG];
+challangeData *li[BACKLOG];
 
 void addNewAccount(char name[], char password[], char status, char login_status, int wrong_password_count)
 {
@@ -233,14 +236,73 @@ void signOut(char name[])
 	}
 }
 
-void *handle_client(void *connect_sock)
+void *gameStarting(void *arg){
+	int roomSession = (int) arg;
+	// khóa các giá trị trong mutex
+	pthread_mutex_lock(&mutex);
+	// chạy game ở đây
+	pthread_mutex_unlock(&mutex);
+}
+
+
+void *sendChallengeMSG(void *arg){
+	int bytes_sent, bytes_received;
+	int roomSession = (int) arg;
+	int player2_conn_sock = logging[li[roomSession]->player2Session]->conn_sock;
+	int player1Session = li[roomSession]->player1Session;
+	char player1Name[1000];
+	memset(player1Name, '\0', (strlen(player1Name) + 1));
+	strcpy(player1Name, logging[player1Session]->name);
+	char buffT[BUFF_SIZE];
+	memset(buffT, '\0', (strlen(buffT) + 1));
+	strcpy(buffT, MSGS[5]);
+	buffT[strlen(buffT)] = '#';
+	strcat(buffT, player1Name);
+	bytes_sent = send(player2_conn_sock, buffT, BUFF_SIZE - 1, 0);
+	memset(buffT, '\0', (strlen(buffT) + 1));
+	bytes_received = recv(player2_conn_sock, buffT, BUFF_SIZE - 1, 0);
+	pthread_t gameStart;
+	pthread_create(&gameStart, NULL, &gameStarting, (int) roomSession);
+	pthread_join(gameStart, NULL);
+}
+
+int sendChallenge(int x, char opponentName[]){\
+	//0: không tồn tại, 1: đối thủ đồng ý, 2: không đồng ý, 3: bận; 
+	int conn_sock = logging[x];
+	for(int i=0; i<BACKLOG; i++){
+		if(strcpy(logging[x]->name, opponentName) == 0){
+			if(logging[x]->login_status != 1){
+				return 3;
+			}
+			else{
+				// đợi đồng ý;
+				pthread_t waitingAccept;
+				int roomSession = -1;
+				for(j = 0; j< BACKLOG;j++){
+					if(li[j]->roomStatus == 0){
+						roomSession = j;
+						break;
+					}
+				}
+				if(roomSession == -1)	return 2;
+				li[roomSession]->roomStatus = 1;
+				li[roomSession]->player1Session = x;
+				li[roomSession]->player2Session = i;
+				pthread_create(&waitingAccept, NULL, &sendChallengeMSG, (int) roomSession);
+				pthread_join(waitingAccept, NULL);
+			}
+		}
+	}
+	return 0;
+}
+
+void *handle_client(int x)
 {
-	account *data = (account *)connect_sock;
 	pthread_detach(pthread_self());
 	int bytes_sent, bytes_received;
-	int session = (int)data->session;
+	int session = (int)logging[x]->session;
 	thread_status[session] = 1;
-	int conn_sock = data->conn_sock;
+	int conn_sock = logging[x]->conn_sock;
 	readDataFromFile();
 	char msgType[7];
 	while(1){
@@ -262,10 +324,14 @@ void *handle_client(void *connect_sock)
 				msgTypeInt = i;
 				break;
 			}
-		} 
-		printf("%d\n", msgTypeInt);
+		}
+		printf("MsgType: %d\n", msgTypeInt);
+		strcpy(buffTemp, buff);
 		switch (msgTypeInt)
 		{
+		case 0:
+			/* code */
+			break;
 		case 1:
 			/* code */
 			break;
@@ -274,9 +340,16 @@ void *handle_client(void *connect_sock)
 			break;
 		case 3:
 			/* code */
+			char opponentName[1000]; 
+			for(int i= 7; i< strlen(buffTemp);i++){
+				if(buffTemp[i] == '\0')	break;
+				opponentName[i-7] = buffTemp[i];
+				opponentName[i-6] = '\0';
+			}
+			printf("%s\n", opponentName);
 			break;
 		case 4:
-			/* code */	
+			/* code */
 			break;
 		case 5:
 			/* code */
@@ -439,10 +512,8 @@ int main(int argc, char *argv[]){
 					break;
 				}
 			}
-			account *temp = (account *)malloc(sizeof(account));
-			temp->session = x;
-			temp->conn_sock = conn_sock;
-			pthread_create(&client_thread[x], NULL, &handle_client, (void *)temp);
+			logging[x]->conn_sock = conn_sock;
+			pthread_create(&client_thread[x], NULL, &handle_client, (int) x);
 		}
 	}
 	for (int i = 0; i < BACKLOG; i++) {
