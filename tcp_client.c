@@ -46,13 +46,13 @@ void *sendThread(void *arg)
       close(client_sock);
       exit(0);
     }
-    if (containsNonAlphaNumeric(buff) == 0)
-    {
-      printf("Please enter only number and alphabet characters\n");
-      continue;
-    }
+    printf("%s\n", buff);
+    // if (containsNonAlphaNumeric(buff) == 0)
+    // {
+    //   printf("Please enter only number and alphabet characters\n");
+    //   continue;
+    // }
     sin_size = sizeof(struct sockaddr);
-
     bytes_sent = send(client_sock, buff, strlen(buff), 0);
     if (bytes_sent < 0)
     {
@@ -85,6 +85,7 @@ void *recvThread(void *arg)
   }
 }
 
+
 int main(int argc, char *argv[])
 {
   if (argc != 3)
@@ -109,11 +110,14 @@ int main(int argc, char *argv[])
     return 0;
   }
 
-  pthread_t sendThreadID, recvThreadID;
+  pthread_t sendThreadID;
+  pthread_t recvThreadID;
 
   pthread_create(&sendThreadID, NULL, sendThread, &client_sock);
   pthread_create(&recvThreadID, NULL, recvThread, &client_sock);
-
+  while (1)
+  {
+  }
   pthread_join(sendThreadID, NULL);
   pthread_join(recvThreadID, NULL);
 }
