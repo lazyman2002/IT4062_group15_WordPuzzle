@@ -1,0 +1,32 @@
+void *gameStarting(void *arg){
+	int roomSession = (int) arg;
+	FILE *f = fopen("quiz.txt", "r");
+	int row=1;
+	int space;
+	char answer[100];
+	char hints[100];
+	fscanf(f, "%d %s", &space, answer );
+	li[roomSession]->quiz.collum = space;
+	strcpy(li[roomSession]->quiz.colAnswer, "");
+	strcpy(li[roomSession]->quiz.colHints, "");
+	while (fscanf(f, "%d %s", &space, answer ) == 2)
+	{
+		fscanf(f, " %99[^\n]", hints);
+		li[roomSession]->quiz.rowData[row].spacing = space;
+		strcpy(li[roomSession]->quiz.rowData[row].rowAnswer, answer);
+		strcpy(li[roomSession]->quiz.rowData[row].rowHints , hints);
+		row++;
+	}
+	li[roomSession]->quiz.row = row-1;
+	// khóa các giá trị trong mutex
+	while(1){
+		if()
+		pthread_mutex_lock(&mutex);
+		// chạy game ở đây
+		pthread_mutex_unlock(&mutex);
+	}
+}
+
+
+	pthread_mutex_lock(&mutex);
+	pthread_mutex_unlock(&mutex);

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <pthread.h>
+// #include <gtk/gtk.h>
 
 #define BUFF_SIZE 2047
 #define BACKLOG 2
@@ -15,10 +16,10 @@
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int PORT; /* Port that will be opened */
-char buff[BUFF_SIZE], buffTemp[BUFF_SIZE];
+// char buff[BUFF_SIZE], buffTemp[BUFF_SIZE];
 int thread_status[BACKLOG] = {0};
-char *MSGC[] = {"MSGC01", "MSGC02", "MSGC03", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11"};
-char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11"};
+char *MSGC[] = {"MSGC01", "MSGC02", "MSGC03", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11", "MSGC12"};
+char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11", "MSGS12"};
 
 typedef struct
 {
@@ -26,29 +27,130 @@ typedef struct
 	int conn_sock;
 	char name[1000];
 	char password[1000];
-	char status;
-	char login_status;
+	char status;	   // blocked or not
+	char login_status; // 0: not here, 1: in active, 2: busy, 3: finding
 	int wrong_password_count;
-	struct account *next;
-} account;
+	struct Account *next;
+} Account;
 
-typedef struct{
-	int roomStatus;	//0: phòng trống, 1: phòng bận
+typedef struct
+{
+	int spacing;
+	char rowAnswer[50];
+	char rowHints[1000];
+	int rowAnswered; // 0: chưa đc trả lời,1 đã được trả lời
+} Row;
+
+typedef struct
+{
+	int row;
+	int collum;
+	int colAnswered; // 0: chưa đc trả lời,1 đã được trả lời
+	char colAnswer[50];
+	char colHints[1000];
+	Row rowData[20];
+} Quiz;
+
+typedef struct
+{
+	int roomStatus; // 0: phòng trống, 1: phòng bận
 	int player1Session;
 	int player2Session;
-	int playerTurn; //0: player1, 1: player2
-
+	int playerTurn; // 0: player1, 1: player2
+	int player1Score;
+	int player2Score;
+	Quiz quiz;
 } challangeData;
 
-account *list = NULL;
-account *logging[BACKLOG];
+Account *list = NULL;
+Account *logging[BACKLOG];
 challangeData *li[BACKLOG];
+
+void gameStart(int roomSession)
+{
+	// Lay Quiz
+	char buff[BUFF_SIZE - 1];
+	int bytes_sent, bytes_received;
+	FILE *f = fopen("quiz.txt", "r");
+	int row = 1;
+	int space;
+	char answer[100];
+	char hints[100];
+	fscanf(f, "%d %s", &space, answer);
+	fscanf(f, " %99[^\n]", hints);
+	li[roomSession]->quiz.collum = space;
+	strcpy(li[roomSession]->quiz.colAnswer, answer);
+	strcpy(li[roomSession]->quiz.colHints, hints);
+	while (fscanf(f, "%d %s", &space, answer) == 2)
+	{
+		fscanf(f, " %99[^\n]", hints);
+		li[roomSession]->quiz.rowData[row].spacing = space;
+		strcpy(li[roomSession]->quiz.rowData[row].rowAnswer, answer);
+		strcpy(li[roomSession]->quiz.rowData[row].rowHints, hints);
+		row++;
+	}
+	// Khởi tạo trận đấu
+	memset(buff, '\0', sizeof(buff));
+	strcpy(buff, "MSGS04#");
+	int player1Session = li[roomSession]->player1Session;
+	// char player1Name = logging[li[roomSession]->player1Session]->name;
+	strcat(buff, logging[player1Session]->name);
+	strcat(buff, "#");
+	int player2Session = li[roomSession]->player2Session;
+	// char player2Name = logging[li[roomSession]->player2Session]->name;
+	strcat(buff, logging[player2Session]->name);
+	strcat(buff, "#");
+	char tempStr[BUFF_SIZE - 1];
+	snprintf(tempStr, BUFF_SIZE - 1, "%d#%d#%d#", roomSession, li[roomSession]->quiz.row, li[roomSession]->quiz.collum);
+	strcat(buff, tempStr);
+	strcat(buff, li[roomSession]->quiz.colHints);
+	pthread_mutex_lock(&mutex);
+	bytes_sent = send(logging[player1Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+	bytes_sent = send(logging[player2Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+	pthread_mutex_unlock(&mutex);
+	for (int i = 1; i <= row; i++)
+	{
+		memset(buff, '\0', sizeof(buff));
+		strcpy(buff, "MSGS12#");
+		snprintf(tempStr, BUFF_SIZE - 1, "%d#%d#%d#", roomSession, row, li[roomSession]->quiz.rowData[i].spacing);
+		strcat(buff, tempStr);
+		strcat(buff, li[roomSession]->quiz.rowData[i].rowAnswer);
+		strcat(buff, "#");
+		strcat(buff, li[roomSession]->quiz.rowData[i].rowHints);
+		pthread_mutex_lock(&mutex);
+		bytes_sent = send(logging[player1Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+		bytes_sent = send(logging[player2Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+		pthread_mutex_unlock(&mutex);
+	}
+}
+
+void clearChallangeData(int session)
+{
+	li[session]->roomStatus = 0;
+	li[session]->player1Session = -1;
+	li[session]->player2Session = -1;
+	li[session]->player1Score = 0;
+	li[session]->player2Score = 0;
+	li[session]->playerTurn = 0;
+	li[session]->quiz.row = 0;
+	li[session]->quiz.collum = 0;
+	li[session]->quiz.colAnswered = 0;
+	strcpy(li[session]->quiz.colAnswer, "");
+	strcpy(li[session]->quiz.colHints, "");
+	for (int i = 0; i < 20; i++)
+	{
+		li[session]->quiz.rowData[i].spacing = 0;
+		li[session]->quiz.rowData[i].rowAnswered = 0;
+		strcpy(li[session]->quiz.rowData[i].rowAnswer, "");
+		strcpy(li[session]->quiz.rowData[i].rowHints, "");
+	}
+}
 
 void addNewAccount(char name[], char password[], char status, char login_status, int wrong_password_count)
 {
 	if (list == NULL)
 	{
-		list = (account *)malloc(sizeof(account));
+		list = (Account *)malloc(sizeof(Account));
 		list->next = NULL;
 		strcpy(list->name, name);
 		strcpy(list->password, password);
@@ -57,12 +159,12 @@ void addNewAccount(char name[], char password[], char status, char login_status,
 		list->login_status = login_status;
 		return;
 	}
-	account *temp = list;
+	Account *temp = list;
 	while (temp->next != NULL)
 	{
 		temp = temp->next;
 	}
-	temp->next = (account *)malloc(sizeof(account));
+	temp->next = (Account *)malloc(sizeof(Account));
 	temp = temp->next;
 	strcpy(temp->name, name);
 	strcpy(temp->password, password);
@@ -75,7 +177,7 @@ void addNewAccount(char name[], char password[], char status, char login_status,
 
 int checkAccountStatus(char name[])
 {
-	account *temp = list;
+	Account *temp = list;
 	if (strcmp(temp->name, name) == 0)
 	{
 		if (temp->status == '0')
@@ -97,9 +199,9 @@ int checkAccountStatus(char name[])
 	return 1;
 }
 
-int accountExisted(char name[])
+int AccountExisted(char name[])
 {
-	account *temp = list;
+	Account *temp = list;
 	if (strcmp(temp->name, name) == 0)
 	{
 		return 1;
@@ -117,13 +219,13 @@ int accountExisted(char name[])
 
 void writeDataToFile()
 {
-	FILE *f = fopen("account.txt", "w");
+	FILE *f = fopen("Account.txt", "w");
 
 	if (f == NULL)
 	{
 		return;
 	}
-	account *temp = list;
+	Account *temp = list;
 	fprintf(f, "%s %s %c %c %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count);
 	while (temp->next != NULL)
 	{
@@ -137,7 +239,7 @@ void writeDataToFile()
 void readDataFromFile()
 {
 	list = NULL;
-	FILE *f = fopen("account.txt", "r");
+	FILE *f = fopen("Account.txt", "r");
 	char name[100];
 	char password[100];
 	char status;
@@ -155,7 +257,7 @@ void readDataFromFile()
 int signIn(char name[], char password[])
 {
 	readDataFromFile();
-	account *temp = list;
+	Account *temp = list;
 	if (strcmp(temp->name, name) == 0)
 	{
 		if (strcmp(temp->password, password) == 0)
@@ -219,7 +321,7 @@ int signIn(char name[], char password[])
 void signOut(char name[])
 {
 	readDataFromFile();
-	account *temp = list;
+	Account *temp = list;
 	if (strcmp(temp->name, name) == 0)
 	{
 		temp->login_status = '0';
@@ -236,68 +338,89 @@ void signOut(char name[])
 	}
 }
 
-void *gameStarting(void *arg){
-	int roomSession = (int) arg;
-	// khóa các giá trị trong mutex
-	pthread_mutex_lock(&mutex);
-	// chạy game ở đây
-	pthread_mutex_unlock(&mutex);
-}
-
-
-void *sendChallengeMSG(void *arg){
+void *sendChallengeMSG(void *arg)
+{
 	int bytes_sent, bytes_received;
-	int roomSession = (int) arg;
+	int roomSession = (int)arg;
 	int player2_conn_sock = logging[li[roomSession]->player2Session]->conn_sock;
 	int player1Session = li[roomSession]->player1Session;
 	char player1Name[1000];
 	memset(player1Name, '\0', (strlen(player1Name) + 1));
 	strcpy(player1Name, logging[player1Session]->name);
-	char buffT[BUFF_SIZE];
+	char buffT[BUFF_SIZE - 1];
 	memset(buffT, '\0', (strlen(buffT) + 1));
 	strcpy(buffT, MSGS[5]);
 	buffT[strlen(buffT)] = '#';
 	strcat(buffT, player1Name);
+	pthread_mutex_lock(&mutex);
 	bytes_sent = send(player2_conn_sock, buffT, BUFF_SIZE - 1, 0);
+	pthread_mutex_unlock(&mutex);
 	memset(buffT, '\0', (strlen(buffT) + 1));
+
+	pthread_mutex_lock(&mutex);
 	bytes_received = recv(player2_conn_sock, buffT, BUFF_SIZE - 1, 0);
-	pthread_t gameStart;
-	pthread_create(&gameStart, NULL, &gameStarting, (int) roomSession);
-	pthread_join(gameStart, NULL);
+	pthread_mutex_unlock(&mutex);
+
+	char answerChallenge[100];
+	for (int i = 0; i < strlen(buffT); i++)
+	{
+		if (buffT[i] == '#')
+		{
+			answerChallenge[i] = '\0';
+			break;
+		}
+		answerChallenge[i] = buffT[i];
+	}
+	if (strcmp(answerChallenge, MSGC[4]) != 0)
+		return 2;
+	if (buffT[7] == '0')
+		return 2;
+	return 1;
 }
 
-int sendChallenge(int x, char opponentName[]){\
-	//0: không tồn tại, 1: đối thủ đồng ý, 2: không đồng ý, 3: bận; 
+int sendChallenge(int x, char opponentName[])
+{ // 0: không tồn tại, 1: đối thủ đồng ý, 2: không đồng ý, 3: bận;
 	int conn_sock = logging[x];
-	for(int i=0; i<BACKLOG; i++){
-		if(strcpy(logging[x]->name, opponentName) == 0){
-			if(logging[x]->login_status != 1){
+	int roomSession = -1;
+	for (int i = 0; i < BACKLOG; i++)
+	{
+		if (strcpy(logging[x]->name, opponentName) == 0)
+		{
+			if (logging[x]->login_status != 1)
+			{
 				return 3;
 			}
-			else{
-				// đợi đồng ý;
-				pthread_t waitingAccept;
-				int roomSession = -1;
-				for(j = 0; j< BACKLOG;j++){
-					if(li[j]->roomStatus == 0){
+			else
+			{
+				for (int j = 0; j < BACKLOG; j++)
+				{
+					if (li[j]->roomStatus == 0)
+					{
 						roomSession = j;
 						break;
 					}
 				}
-				if(roomSession == -1)	return 2;
+				if (roomSession == -1)
+					return 2;
 				li[roomSession]->roomStatus = 1;
 				li[roomSession]->player1Session = x;
 				li[roomSession]->player2Session = i;
-				pthread_create(&waitingAccept, NULL, &sendChallengeMSG, (int) roomSession);
-				pthread_join(waitingAccept, NULL);
+				break;
 			}
 		}
 	}
-	return 0;
+	// đợi đồng ý;
+	int accepted;
+	pthread_t waitingAccept;
+	pthread_create(&waitingAccept, NULL, &sendChallengeMSG, (int)roomSession);
+	pthread_join(waitingAccept, accepted);
+	return accepted;
 }
 
 void *handle_client(int x)
 {
+	char buffTemp[BUFF_SIZE - 1];
+	char buff[BUFF_SIZE - 1];
 	pthread_detach(pthread_self());
 	int bytes_sent, bytes_received;
 	int session = (int)logging[x]->session;
@@ -305,13 +428,18 @@ void *handle_client(int x)
 	int conn_sock = logging[x]->conn_sock;
 	readDataFromFile();
 	char msgType[7];
-	while(1){
-	    memset(buff, '\0', (strlen(buff) + 1));
-	    memset(msgType, '\0', (strlen(msgType) + 1));
-    	fflush(stdin);
+	while (1)
+	{
+		memset(buff, '\0', (strlen(buff) + 1));
+		memset(msgType, '\0', (strlen(msgType) + 1));
+		fflush(stdin);
+		pthread_mutex_lock(&mutex);
 		bytes_received = recv(conn_sock, buff, BUFF_SIZE - 1, 0);
-		for(int i=0; i<strlen(buff); i++){
-			if(buff[i]=='#'){
+		pthread_mutex_unlock(&mutex);
+		for (int i = 0; i < strlen(buff); i++)
+		{
+			if (buff[i] == '#')
+			{
 				printf("\n");
 				break;
 			}
@@ -319,8 +447,10 @@ void *handle_client(int x)
 		}
 		int msgTypeInt = -1;
 		// kiem tra loai thong diep
-		for(int i=0;i<sizeof(MSGC)/sizeof(MSGC[0]);i++){
-			if(strcmp(msgType, MSGC[i]) == 0){
+		for (int i = 0; i < sizeof(MSGC) / sizeof(MSGC[0]); i++)
+		{
+			if (strcmp(msgType, MSGC[i]) == 0)
+			{
 				msgTypeInt = i;
 				break;
 			}
@@ -340,13 +470,42 @@ void *handle_client(int x)
 			break;
 		case 3:
 			/* code */
-			char opponentName[1000]; 
-			for(int i= 7; i< strlen(buffTemp);i++){
-				if(buffTemp[i] == '\0')	break;
-				opponentName[i-7] = buffTemp[i];
-				opponentName[i-6] = '\0';
+			char opponentName[1000];
+			for (int i = 7; i < strlen(buffTemp); i++)
+			{
+				if (buffTemp[i] == '\0')
+					break;
+				opponentName[i - 7] = buffTemp[i];
+				opponentName[i - 6] = '\0';
 			}
-			printf("%s\n", opponentName);
+			int answered = sendChallenge(x, opponentName);
+			if (answered == 1)
+			{
+				// Lời thách đấu được chấp nhận
+				logging[x]->login_status = 2;
+				pthread_mutex_lock(&mutex);
+				bytes_sent = send(logging[x]->conn_sock, "MSGS07#1", BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+				// Tim phong
+				int roomSession;
+				for (int i = 0; i < BACKLOG; i++)
+				{
+					if (li[i]->player1Session == x)
+					{
+						roomSession = i;
+						break;
+					}
+				}
+				// Bat dau tran dau
+				gameStart(roomSession);
+			}
+			else
+			{
+				// lời thách đấu bị từ chối
+				pthread_mutex_lock(&mutex);
+				bytes_sent = send(logging[x]->conn_sock, "MSGS07#0", BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+			}
 			break;
 		case 4:
 			/* code */
@@ -355,19 +514,117 @@ void *handle_client(int x)
 			/* code */
 			break;
 		case 6:
-			/* code */
+			logging[x]->login_status = 3;
+			int y = -1;
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (logging[i]->login_status == 3)
+				{
+					y = i;
+					break;
+				}
+			}
+			if (y == -1)
+				break;
+			int z = -1;
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (li[i]->roomStatus == 0)
+				{
+					li[i]->roomStatus = 1;
+					li[i]->player1Session = x;
+					li[i]->player2Session = y;
+					gameStart(i);
+					break;
+				}
+			}
 			break;
 		case 7:
-			/* code */
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (logging[i]->login_status == 1)
+				{
+					memset(buff, '\0', sizeof(buff));
+					strcpy(buff, "MSGS12#");
+					strcat(buff, logging[i]->name);
+					bytes_sent = send(logging[x]->conn_sock, buff, BUFF_SIZE - 1, 0);
+					pthread_mutex_unlock(&mutex);
+					break;
+				}
+			}
 			break;
 		case 8:
-			/* code */
+			memset(buff, '\0', sizeof(buff));
+			strcpy(buff, "MSGS11#1");
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (li[i]->player1Session == x)
+				{
+					int player2Session = li[i]->player2Session;
+					pthread_mutex_lock(&mutex);
+					bytes_sent = send(logging[player2Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+					pthread_mutex_unlock(&mutex);
+					break;
+				}
+				else if (li[i]->player2Session == x)
+				{
+					int player1Session = li[i]->player1Session;
+					pthread_mutex_lock(&mutex);
+					bytes_sent = send(logging[player1Session]->conn_sock, buff, BUFF_SIZE - 1, 0);
+					pthread_mutex_unlock(&mutex);
+					break;
+				}
+				else
+					continue;
+			}
 			break;
 		case 9:
 			/* code */
 			break;
 		case 10:
 			/* code */
+			int row, time = 0;
+			char answer[100];
+			sscanf(buff, "MSGC11#%d#%d#%s", &row, &time, answer);
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (li[i]->player1Session == x)
+				{
+					if (li[i]->playerTurn == 0)
+					{
+						// trong luot
+					}
+					else
+					{
+						// sai luot
+					}
+				}
+				else if (li[i]->player2Session == x)
+				{
+					if (li[i]->playerTurn == 1)
+					{
+						// trong luot
+					}
+					else
+					{
+						// sai luot
+					}
+				}
+				else
+					continue;
+			}
+			if (row == 0)
+			{
+				// Tra loi cot
+			}
+			else if (row == -1)
+			{
+				// khong tra loi hoac sai turn
+			}
+			else
+			{
+				// Tra loi hang
+			}
 			break;
 		case 11:
 			/* code */
@@ -377,86 +634,20 @@ void *handle_client(int x)
 		}
 	}
 	thread_status[session] = 0;
-    close(conn_sock);
+	close(conn_sock);
 	pthread_exit(NULL);
 	// while (1)
 	// {
 	// 	bytes_sent = send(conn_sock, "ENTER USERNAME", 1024, 0);
 	// 	// nhan username
 	// 	bytes_received = recv(conn_sock, buff, BUFF_SIZE - 1, 0);
-	// 	if (bytes_received < 0)
-	// 		perror("\nError: ");
-	// 	else
-	// 	{
-	// 		buff[bytes_received] = '\0';
-	// 		buff[strlen(buff) - 1] = '\0';
-	// 		if (accountExisted(buff))
-	// 		{
-	// 			char username[1024];
-	// 			strcpy(username, buff);
-	// 			bytes_sent = send(conn_sock, "ENTER PASSWORD", 1024, 0);
-	// 			// nhan password
-	// 			bytes_received = recv(conn_sock, buff, BUFF_SIZE - 1, 0);
-	// 			if (bytes_received < 0)
-	// 				perror("\nError: ");
-	// 			else
-	// 			{
-	// 				buff[bytes_received] = '\0';
-	// 				buff[strlen(buff) - 1] = '\0';
-	// 				int sign_in = signIn(username, buff);
-	// 				if (sign_in == 1)
-	// 				{
-	// 					writeDataToFile();
-	// 					printf("User %s just logged in\n", username);
-	// 					char welcome_message[1024];
-	// 					strcpy(welcome_message, "WELCOME ");
-	// 					strcat(welcome_message, username);
-	// 					strcat(welcome_message, "\n");
-	// 					bytes_sent = send(conn_sock, welcome_message, 1024, 0);
-	// 					while (1)
-	// 					{
-	// 						bytes_sent = send(conn_sock, "PRESS ENTER TO LOGOUT", 1024, 0);
-	// 						bytes_received = recv(conn_sock, buff, BUFF_SIZE - 1, 0);
-	// 						buff[bytes_received] = '\0';
-	// 						if (strcmp(buff, "\n") == 0)
-	// 						{
-	// 							signOut(username);
-	// 							writeDataToFile();
-	// 							printf("User %s just logged out\n", username);
-	// 							char goodbye_message[1024];
-	// 							strcpy(goodbye_message, "Goodbye ");
-	// 							strcat(goodbye_message, username);
-	// 							strcat(goodbye_message, "\n");
-	// 							bytes_sent = send(conn_sock, goodbye_message, 1024, 0);
-	// 							close(conn_sock);
-	// 							// pthread_exit(NULL);
-	// 							return;
-	// 						}
-	// 					}
-	// 				}
-	// 				else if (sign_in == 2)
-	// 				{
-	// 					bytes_sent = send(conn_sock, "ACCOUNT IS ALREADY LOGGED IN AT ANOTHER LOCATION\n", 1024, 0);
-	// 				}
-	// 				else if (sign_in == 3)
-	// 				{
-	// 					bytes_sent = send(conn_sock, "WRONG PASSWORD\n", 1024, 0);
-	// 				}
-	// 				else if (sign_in == 0)
-	// 				{
-	// 					bytes_sent = send(conn_sock, "ACCOUNT IS BLOCKED\n", 1024, 0);
-	// 				}
-	// 			}
-	// 		}
-	// 		else
-	// 		{
-	// 			bytes_sent = send(conn_sock, "ACCOUNT NOT EXIST\n", 1024, 0);
-	// 		}
-	// 	}
-	// }
 }
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[])
+{
+	logging[BACKLOG] = (Account *)malloc(sizeof(Account) * BACKLOG);
+	li[BACKLOG] = (challangeData *)malloc(sizeof(challangeData) * BACKLOG);
+
 	pthread_t client_thread[BACKLOG];
 	if (argc != 2)
 	{
@@ -479,9 +670,9 @@ int main(int argc, char *argv[]){
 	// Step 2: Bind address to socket
 	bzero(&server, sizeof(server));
 	server.sin_family = AF_INET;
-	server.sin_port = htons(PORT);							/* Remember htons() from "Conversions" section? =) */
+	server.sin_port = htons(PORT);				/* Remember htons() from "Conversions" section? =) */
 	server.sin_addr.s_addr = htonl(INADDR_ANY); /* INADDR_ANY puts your IP address automatically */
-	bzero(&(server.sin_zero), 8);								/* zero the rest of the structure */
+	bzero(&(server.sin_zero), 8);				/* zero the rest of the structure */
 
 	if (bind(listen_sock, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
 	{ /* calls bind() */
@@ -500,24 +691,29 @@ int main(int argc, char *argv[]){
 	while (1)
 	{
 		sin_size = sizeof(struct sockaddr_in);
-		if ((conn_sock = accept(listen_sock, (struct sockaddr *)&client, &sin_size)) == -1){
+		if ((conn_sock = accept(listen_sock, (struct sockaddr *)&client, &sin_size)) == -1)
+		{
 			perror("\nError: ");
 		}
-		else  {
+		else
+		{
 			int x;
-			for(int i=0;i<BACKLOG;i++){
-				if(thread_status[i] == 0){
+			for (int i = 0; i < BACKLOG; i++)
+			{
+				if (thread_status[i] == 0)
+				{
 					printf("You got a connection from %s\n", inet_ntoa(client.sin_addr));
 					x = i;
 					break;
 				}
 			}
 			logging[x]->conn_sock = conn_sock;
-			pthread_create(&client_thread[x], NULL, &handle_client, (int) x);
+			pthread_create(&client_thread[x], NULL, &handle_client, (int)x);
 		}
 	}
-	for (int i = 0; i < BACKLOG; i++) {
-    	pthread_join(client_thread[i], NULL);
+	for (int i = 0; i < BACKLOG; i++)
+	{
+		pthread_join(client_thread[i], NULL);
 	}
 	close(listen_sock);
 }
