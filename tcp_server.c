@@ -146,7 +146,18 @@ void clearChallangeData(int session)
 		strcpy(li[session]->quiz.rowData[i].rowHints, "");
 	}
 }
-
+void clearLoggingData(int x){
+	logging[x]->conn_sock = 0;
+	logging[x]->login_status = 0;
+	logging[x]->ELO = 0;
+	logging[x]->session = 0;
+	logging[x]->status = 0;
+	logging[x]->wrong_password_count = 0;
+	logging[x]->next = NULL;
+	strcpy(logging[x]->name, "");
+	strcpy(logging[x]->password, "");
+	thread_status[x] = 0;
+}
 void addNewAccount(char name[], char password[], char status, char login_status, int wrong_password_count, int ELO)
 {
     Account *newAccount = (Account *)malloc(sizeof(Account));
@@ -229,7 +240,13 @@ void writeDataToFile()
 		temp = temp->next;
 		fprintf(f, "%s %s %c %c %d %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count, temp->ELO);
 	}
-
+	Account *tempx = list;
+	while (tempx!=NULL)
+	{
+		printf("%s %s %c %c %d %d\n", tempx->name, tempx->password, tempx->status, tempx->login_status, tempx->wrong_password_count, tempx->ELO);
+		tempx = tempx->next;
+	}
+	
 	fclose(f);
 }
 
@@ -510,8 +527,9 @@ void *handle_client(int x)
 			}
 			signOut(username);
 			pthread_mutex_lock(&mutex);
-			bytes_sent = send(logging[x]->conn_sock, "MSGS03#1", BUFF_SIZE - 1, 0);
+			bytes_sent = send(logging[x]->conn_sock, "MSGS02#1", BUFF_SIZE - 1, 0);
 			pthread_mutex_unlock(&mutex);
+			clearLoggingData(x);
 			break;
 		case 2:
 			/* code */

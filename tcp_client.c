@@ -150,7 +150,6 @@ void *recvThread(void *arg)
         memset(cELO, '\0', sizeof(cELO));
         for(int i = 9;i<strlen(buff);i++){
           if(buff[i] == '#'){
-
             i++;
             int k = i;
             for(;i<strlen(buff); i++){
@@ -163,14 +162,11 @@ void *recvThread(void *arg)
         printf("ELO: %d\n", account->ELO);
         printf("%s\n%s\n%d", account->name, account->password, account->ELO);
         gtk_widget_hide(GTK_WIDGET(WindowLogin));
-        printf("stop\n");
         setupHome();
         gtk_label_set_text(GTK_LABEL(usernameData), account->name);
-        printf("stop\n");
         gtk_label_set_text(GTK_LABEL(ELOData), cELO);
         printf("stop\n");
         gtk_widget_show(GTK_WIDGET(WindowHome));
-        printf("stop\n");
         break;
       case '2':
         /* code */
@@ -188,6 +184,9 @@ void *recvThread(void *arg)
       break;
     case 1:
       /* code */
+      memset(buff, '\0', sizeof(buff));
+			sprintf(buff, "MSGC02#%s", account->name);
+      bytes_sent = send(account->conn_sock , buff, BUFF_SIZE-1, 0);
       break;
     case 2:
       /* code */
@@ -244,7 +243,7 @@ void on_loginButton_clicked(GtkButton *button, gpointer user_data) {
     strcat(buff, username);
     strcat(buff, "#");
     strcat(buff, password);
-    bytes_sent = send(client_sock, buff, strlen(buff), 0);
+    bytes_sent = send(client_sock, buff, BUFF_SIZE-1, 0);
     if (bytes_sent < 0)
     {
       perror("Error: ");
@@ -269,7 +268,18 @@ void switch_to_login(GtkButton *button, gpointer user_data) {
 
 void findGame(){}
 void findActive(){}
-void signout(){}
+void signout(){
+  memset(buff, '\0', sizeof(buff));
+	sprintf(buff, "MSGC02#%s", account->name);
+  bytes_sent = send(account->conn_sock, buff, BUFF_SIZE-1, 0);
+  strcpy(account->name, "");
+  strcpy(account->password, "");
+  account->conn_sock = 0;
+  account->ELO = 0;
+  gtk_widget_hide(GTK_WIDGET(WindowHome));
+  setupLogin();
+  gtk_widget_show(GTK_WIDGET(WindowLogin));
+}
 void setupLogin(){
   WindowLogin = GTK_WIDGET(gtk_builder_get_object(builderLogin, "window"));
   usernameLabel = GTK_WIDGET(gtk_builder_get_object(builderLogin, "usernameLabel"));
@@ -322,7 +332,6 @@ void *waitingChallenge(void *inp){
     }
   }
 }
-
 void loginpage(){
   setupLogin();
   gtk_widget_show(WindowLogin);
