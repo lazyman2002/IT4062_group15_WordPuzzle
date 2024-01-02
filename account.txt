@@ -1,5 +1,6 @@
-hust2 hayqua 0 0 0
-hedspi1 hedpsi2016 0 0 0
-hust hust123 1 0 0
-hust1 123456 0 0 0
-hust3 123456 1 0 0
+hust2 hayqua 1 0 0 1
+hedspi1 hedpsi2016 1 0 0 2
+hust hust123 1 1 0 3
+hust1 123456 1 0 0 4
+hust3 123456 1 0 1 5
+hust123 hust123 1 0 0 6

@@ -23,13 +23,14 @@ char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSG
 
 typedef struct
 {
-	int session;
+	int session;	//logging[session]
 	int conn_sock;
 	char name[1000];
 	char password[1000];
-	char status;	   // blocked or not
+	char status;	   // 0: blocked, 1: free
 	char login_status; // 0: not here, 1: in active, 2: busy, 3: finding
 	int wrong_password_count;
+	int ELO;
 	struct Account *next;
 } Account;
 
@@ -146,33 +147,29 @@ void clearChallangeData(int session)
 	}
 }
 
-void addNewAccount(char name[], char password[], char status, char login_status, int wrong_password_count)
+void addNewAccount(char name[], char password[], char status, char login_status, int wrong_password_count, int ELO)
 {
-	if (list == NULL)
-	{
-		list = (Account *)malloc(sizeof(Account));
-		list->next = NULL;
-		strcpy(list->name, name);
-		strcpy(list->password, password);
-		list->wrong_password_count = wrong_password_count;
-		list->status = status;
-		list->login_status = login_status;
-		return;
-	}
-	Account *temp = list;
-	while (temp->next != NULL)
-	{
-		temp = temp->next;
-	}
-	temp->next = (Account *)malloc(sizeof(Account));
-	temp = temp->next;
-	strcpy(temp->name, name);
-	strcpy(temp->password, password);
-	temp->wrong_password_count = wrong_password_count;
-	temp->status = status;
-	temp->login_status = login_status;
-	temp->next = NULL;
-	return;
+    Account *newAccount = (Account *)malloc(sizeof(Account));
+    if (newAccount == NULL) {
+        // Xử lý lỗi khi cấp phát bộ nhớ không thành công
+        return;
+    }
+    newAccount->next = NULL;
+    strcpy(newAccount->name, name);
+    strcpy(newAccount->password, password);
+    newAccount->wrong_password_count = wrong_password_count;
+    newAccount->status = status;
+    newAccount->login_status = login_status;
+	newAccount->ELO=ELO;
+    if (list == NULL) {
+        list = newAccount;
+    } else {
+        Account *temp = list;
+        while (temp->next != NULL) {
+            temp = temp->next;
+        }
+        temp->next = newAccount;
+    }
 }
 
 int checkAccountStatus(char name[])
@@ -219,18 +216,18 @@ int AccountExisted(char name[])
 
 void writeDataToFile()
 {
-	FILE *f = fopen("Account.txt", "w");
+	FILE *f = fopen("account.txt", "w");
 
 	if (f == NULL)
 	{
 		return;
 	}
 	Account *temp = list;
-	fprintf(f, "%s %s %c %c %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count);
+	fprintf(f, "%s %s %c %c %d %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count, temp->ELO);
 	while (temp->next != NULL)
 	{
 		temp = temp->next;
-		fprintf(f, "%s %s %c %c %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count);
+		fprintf(f, "%s %s %c %c %d %d\n", temp->name, temp->password, temp->status, temp->login_status, temp->wrong_password_count, temp->ELO);
 	}
 
 	fclose(f);
@@ -239,103 +236,80 @@ void writeDataToFile()
 void readDataFromFile()
 {
 	list = NULL;
-	FILE *f = fopen("Account.txt", "r");
+	FILE *f = fopen("account.txt", "r");
 	char name[100];
 	char password[100];
 	char status;
 	char login_status;
 	int wrong_password_count;
+	int ELO;
 	if (f == NULL)
 		return;
-	while (fscanf(f, "%s %s %c %c %d", name, password, &status, &login_status, &wrong_password_count) == 5)
+	while (fscanf(f, "%s %s %c %c %d %d", name, password, &status, &login_status, &wrong_password_count, &ELO) == 6)
 	{
-		addNewAccount(name, password, status, login_status, wrong_password_count);
+		addNewAccount(name, password, status, login_status, wrong_password_count, ELO);
 	}
 	fclose(f);
 }
 
-int signIn(char name[], char password[])
-{
-	readDataFromFile();
-	Account *temp = list;
-	if (strcmp(temp->name, name) == 0)
+int signIn(char name[], char password[]) {
+    readDataFromFile();
+	Account *tempx = list;
+    while (tempx != NULL)
 	{
-		if (strcmp(temp->password, password) == 0)
-		{
-			if (temp->status == '0')
-			{
-				return 0;
-			}
-			if (temp->login_status == '1')
-				return 2;
-			temp->login_status = '1';
-			return 1;
-		}
-		if (temp->wrong_password_count < 3)
-		{
-			temp->wrong_password_count = temp->wrong_password_count + 1;
-			writeDataToFile();
-			return 3;
-		}
-		else
-		{
-			temp->status = '0';
-			temp->wrong_password_count = 0;
-			writeDataToFile();
-			return 0;
-		}
+		printf("%s %s %d %d %d %d\n", tempx->name, tempx->password, tempx->status, tempx->login_status, tempx->wrong_password_count, tempx->ELO);
+		tempx = tempx ->next;
 	}
-	while (temp->next != NULL)
-	{
-		temp = temp->next;
-		if (strcmp(temp->name, name) == 0)
-		{
-			if (strcmp(temp->password, password) == 0)
-			{
-				if (temp->status == '0')
-				{
-					return 0;
-				}
-				if (temp->login_status == '1')
-					return 2;
-				temp->login_status = '1';
-				return 1;
-			}
-			if (temp->wrong_password_count < 2)
-			{
-				temp->wrong_password_count = temp->wrong_password_count + 1;
-				writeDataToFile();
-				return 3;
-			}
-			else
-			{
-				temp->status = '0';
-				temp->wrong_password_count = 0;
-				writeDataToFile();
-				return 0;
-			}
-		}
-	}
+    Account *temp = list;
+    while (temp != NULL) {
+        if (strcmp(temp->name, name) == 0) {
+            if (strcmp(temp->password, password) == 0) {
+                if (temp->status == '0') {
+                    return 0; // Tài khoản bị khóa
+                }
+                if (temp->login_status == '1') {
+                    return 2; // Tài khoản đã đăng nhập từ trước
+                }
+                temp->login_status = '1';
+                writeDataToFile();
+                return 1; // Đăng nhập thành công
+            } else {
+                if (temp->wrong_password_count < 2) {
+                    temp->wrong_password_count++;
+                    writeDataToFile();
+                    return 3; // Sai mật khẩu
+                } else {
+                    temp->status = '0';
+                    temp->wrong_password_count = 0;
+                    writeDataToFile();
+                    return 0; // Tài khoản bị khóa
+                }
+            }
+        }
+        temp = temp->next;
+    }
+	
+    return 3; // Tài khoản không tồn tại
 }
 
-void signOut(char name[])
-{
-	readDataFromFile();
-	Account *temp = list;
-	if (strcmp(temp->name, name) == 0)
-	{
-		temp->login_status = '0';
-		return;
-	}
-	while (temp->next != NULL)
-	{
-		temp = temp->next;
-		if (strcmp(temp->name, name) == 0)
-		{
-			temp->login_status = '0';
-			return;
-		}
-	}
+void signOut(char name[]) {
+    Account *temp = list;
+
+    if (temp == NULL) {
+        printf("List is empty!"); // Handle the case where the list is empty
+        return;
+    }
+
+    while (temp != NULL) {
+        if (strcmp(temp->name, name) == 0) {
+            temp->login_status = '0';
+            writeDataToFile();
+            return;
+        }
+        temp = temp->next;
+    }
+
+    printf("Name not found in the list!"); // Handle the case where name isn't found
 }
 
 void *sendChallengeMSG(void *arg)
@@ -455,18 +429,108 @@ void *handle_client(int x)
 				break;
 			}
 		}
-		printf("MsgType: %d\n", msgTypeInt);
 		strcpy(buffTemp, buff);
+		printf("MsgType: %d\n", msgTypeInt);
+		char username[1000];
+		char password[1000];
+		memset(username, '\0', sizeof(username));
+		memset(password, '\0', sizeof(password));
 		switch (msgTypeInt)
 		{
 		case 0:
 			/* code */
+			// MSGC01#hust#hust123
+			for(int i=7; i<strlen(buffTemp); i++){
+				if(buffTemp[i] == '#'){
+					i++;
+					int temp = i;
+					for(;i<strlen(buffTemp);i++){
+						if(buffTemp[i] == '\n')	break;
+						password[i-temp] = buffTemp[i];
+					}
+					break;
+				}
+				username[i-7] = buffTemp[i];
+			}
+			int i;
+			printf("%s?\n%s?", username, password);
+			int sign =  signIn(username, password);
+			printf("Sign: %d\n", sign);
+			switch (sign)
+			{
+			case 0:
+				/* code: tk bi khoa */
+				pthread_mutex_lock(&mutex);
+				bytes_sent = send(logging[x]->conn_sock, "MSGS01#0", BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+				break;
+			case 1:
+				/* code: dang nhap thanh cong */
+				writeDataToFile();
+				strcpy(logging[x]->name, username);
+				strcpy(logging[x]->password, password);
+				logging[x]->login_status = 1;
+				logging[x]->status = 1;
+				Account *temp = list;
+				while(temp!=NULL){
+					if(strcmp(temp->name, username) == 0){
+						logging[x]->ELO = temp->ELO;
+						break;
+					}
+					temp = temp->next;
+				}
+				pthread_mutex_lock(&mutex);
+				memset(buff, '\0', sizeof(buff));
+				sprintf(buff, "MSGS01#1#%s#%d", logging[x]->name, logging[x]->ELO);
+				bytes_sent = send(logging[x]->conn_sock, buff, BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+				break;
+			case 2:
+				/* code: tk da duoc dang nhap o noi khac */
+				pthread_mutex_lock(&mutex);
+				bytes_sent = send(logging[x]->conn_sock, "MSGS01#2", BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+				printf("Đã gửi\n");
+				break;
+			case 3:
+				/* code: sai password*/
+				pthread_mutex_lock(&mutex);
+				bytes_sent = send(logging[x]->conn_sock, "MSGS01#3", BUFF_SIZE - 1, 0);
+				pthread_mutex_unlock(&mutex);
+				break;
+			default:
+				break;
+			}
 			break;
 		case 1:
 			/* code */
+			for(int i=7; i<strlen(buffTemp); i++){
+				if(buffTemp[i] == '\n')	break;
+				username[i-7] = buffTemp[i]; 
+			}
+			signOut(username);
+			pthread_mutex_lock(&mutex);
+			bytes_sent = send(logging[x]->conn_sock, "MSGS03#1", BUFF_SIZE - 1, 0);
+			pthread_mutex_unlock(&mutex);
 			break;
 		case 2:
 			/* code */
+			for(int i=7; i<strlen(buffTemp); i++){
+				if(buffTemp[i] == '#'){
+					i++;
+					int k = i;
+					username[i-7] = '\0';
+					for(;i<strlen(buffTemp);i++){
+						if(buffTemp[i] == '\n')	break;
+						password[i-k] = buffTemp[i];
+					}
+					break;
+				}
+				username[i-7] = buffTemp[i];
+			}
+			addNewAccount(username, password, '1', '0', 0, 0);
+			writeDataToFile();
+			signIn(username, password);
 			break;
 		case 3:
 			/* code */
@@ -645,9 +709,16 @@ void *handle_client(int x)
 
 int main(int argc, char *argv[])
 {
-	logging[BACKLOG] = (Account *)malloc(sizeof(Account) * BACKLOG);
-	li[BACKLOG] = (challangeData *)malloc(sizeof(challangeData) * BACKLOG);
-
+    for (int i = 0; i < BACKLOG; ++i) {
+        logging[i] = (Account *)malloc(sizeof(Account));
+        li[i] = (challangeData *)malloc(sizeof(challangeData));
+        // Check for malloc failure
+        if (!logging[i] || !li[i]) {
+            // Handle allocation failure
+            // Example: printf("Memory allocation failed");
+            return 1; // Return an error code
+        }
+    }
 	pthread_t client_thread[BACKLOG];
 	if (argc != 2)
 	{
@@ -686,7 +757,6 @@ int main(int argc, char *argv[])
 		perror("\nError: ");
 		return 0;
 	}
-
 	// Step 4: Communicate with clients
 	while (1)
 	{
@@ -704,6 +774,7 @@ int main(int argc, char *argv[])
 				{
 					printf("You got a connection from %s\n", inet_ntoa(client.sin_addr));
 					x = i;
+					thread_status[i] = 1;
 					break;
 				}
 			}
@@ -711,9 +782,15 @@ int main(int argc, char *argv[])
 			pthread_create(&client_thread[x], NULL, &handle_client, (int)x);
 		}
 	}
+	printf("di qua");
 	for (int i = 0; i < BACKLOG; i++)
 	{
 		pthread_join(client_thread[i], NULL);
 	}
+	
+	for (int i = 0; i < BACKLOG; ++i) {
+        free(logging[i]);
+        free(li[i]);
+    }
 	close(listen_sock);
 }
