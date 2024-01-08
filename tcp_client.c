@@ -46,11 +46,11 @@ void *sendThread(void *arg)
       close(client_sock);
       exit(0);
     }
-    if (containsNonAlphaNumeric(buff) == 0)
-    {
-      printf("Please enter only number and alphabet characters\n");
-      continue;
-    }
+    // if (containsNonAlphaNumeric(buff) == 0)
+    // {
+    //   printf("Please enter only number and alphabet characters\n");
+    //   continue;
+    // }
     sin_size = sizeof(struct sockaddr);
 
     bytes_sent = send(client_sock, buff, strlen(buff), 0);
