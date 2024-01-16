@@ -3,13 +3,16 @@
 #include <stdlib.h>
 
 #define BUFF_SIZE 1024
-#define BACKLOG 2
+#define BACKLOG 5
 #define STR_SIZE 100
 #define SENTENCE_SIZE 900
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 char *MSGC[] = {"MSGC01", "MSGC02", "MSGC03", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11", "MSGC12"};
 char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11", "MSGS12"};
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t threads_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct
 {
@@ -27,9 +30,9 @@ typedef struct
 	int conn_sock;
 	char name[STR_SIZE];
 	char password[STR_SIZE];
-	char status;	   // 0: blocked, 1: free
+	// char status;	   // 0: blocked, 1: free
 	char login_status; // 0: not here, 1: in active, 2: busy, 3: finding match
-	int wrong_password_count;
+	// int wrong_password_count;
 	int ELO;
     char buff[BUFF_SIZE-1];
 } Logging;

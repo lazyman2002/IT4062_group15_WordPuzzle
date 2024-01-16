@@ -1,0 +1,12 @@
+5 nambo
+hint for collum
+1 dientich
+hint for row1
+0 phusa
+hint for row2
+2 camau
+hint for row3
+4 bacbo
+hint for row4
+1 mecong
+hint for row5
