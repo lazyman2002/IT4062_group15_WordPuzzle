@@ -97,18 +97,6 @@
           </packing>
         </child>
         <child>
-          <object class="GtkTextView" id="notifyLabel">
-            <property name="name">Signup_Answer</property>
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="opacity">0</property>
-          </object>
-          <packing>
-            <property name="left-attach">1</property>
-            <property name="top-attach">3</property>
-          </packing>
-        </child>
-        <child>
           <object class="GtkButton" id="loginButton">
             <property name="label" translatable="yes">Login</property>
             <property name="visible">True</property>
@@ -136,6 +124,16 @@
           <packing>
             <property name="left-attach">0</property>
             <property name="top-attach">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel" id="notifyLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+          </object>
+          <packing>
+            <property name="left-attach">1</property>
+            <property name="top-attach">3</property>
           </packing>
         </child>
         <child>

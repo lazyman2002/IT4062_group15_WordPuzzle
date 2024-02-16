@@ -8,355 +8,317 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <pthread.h>
+
+#include "function_client.h"
 #include <gtk/gtk.h>
 
-#define BUFF_SIZE 8192
-char *MSGC[] = {"MSGC01", "MSGC02", "MSGC03", "MSGC04", "MSGC05", "MSGC06", "MSGC07", "MSGC08", "MSGC09", "MSGC10", "MSGC11", "MSGC12"};
-char *MSGS[] = {"MSGS01", "MSGS02", "MSGS03", "MSGS04", "MSGS05", "MSGS06", "MSGS07", "MSGS08", "MSGS09", "MSGS10", "MSGS11", "MSGS12"};
-
-int SERV_PORT;
-char SERV_IP[100];
-int client_sock;
-char buff[BUFF_SIZE];
 struct sockaddr_in server_addr;
-int bytes_sent, bytes_received, sin_size;
-int isChallenged;
 
-typedef struct
-{
-	int conn_sock;
-	char name[1000];
-	char password[1000];
-	int ELO;
-} Account;
-Account *account;
-GtkBuilder *builderLogin;
-GtkWidget *WindowLogin;
-GtkBuilder *builderSignup;
-GtkWidget *WindowSignup;
-GtkBuilder *builderHome;
-GtkWidget *WindowHome;
-GtkBuilder *builderChallengePopup;
-GtkWidget *WindowChallengePopup;
-GtkBuilder *builderPlayscreen;
-GtkWidget *WindowPlayscreen;
-GtkBuilder *builderInActive;
-GtkWidget *WindowInActive;
-
-GtkWidget *usernameLabel;
-GtkWidget *passwordLabel;
-GtkWidget *resignPasswordLabel;
-GtkWidget *usernameEntry;
-GtkWidget *passwordEntry;
-GtkWidget *resignPasswordEntry;
-GtkWidget *loginButton;
-GtkWidget *signupButton;
-GtkWidget *notifyLabel;
-GtkWidget *usernameData;
-GtkWidget *ELOData;
-GtkWidget *findGameButton;
-GtkWidget *findActiveButton;
-GtkWidget *logoutButton;
-
-
-int containsNonAlphaNumeric(const char *str)
-{
-  for (int i = 0; str[i] != '\n'; i++)
-  {
-    if ((str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z') || (str[i] >= '0' && str[i] <= '9'))
-    {
-      continue;
-    }
-    else
-    {
-      return 0;
+gboolean handle_GUI(gpointer user_data) {
+  printf("Buff recv: %s\n", account.recv_buff);
+  int MSGType = -1;
+  char MSG[6];
+  for(int i = 0; i < 6; i++){
+    MSG[i] = account.recv_buff[i];
+  }
+  MSG[6] = '\0';
+  for(int i = 0; i < (sizeof(MSGS) / sizeof(MSGS[0])); i++){
+    if(strcmp(MSG, MSGS[i]) == 0){
+      MSGType = i;
+      break;
     }
   }
-  return 1;
-}
-
-void *sendThread(void *arg)
-{
-  // while (1)
-  // {
-  //   memset(buff, '\0', (strlen(buff) + 1));
-  //   fflush(stdout);
-  //   fgets(buff, BUFF_SIZE, stdin);
-  //   if (strcmp(buff, "#\n") == 0 || strcmp(buff, "@\n") == 0)
-  //   {
-  //     close(client_sock);
-  //     exit(0);
-  //   }
-  //   printf("%s\n", buff);
-  //   // if (containsNonAlphaNumeric(buff) == 0)
-  //   // {
-  //   //   printf("Please enter only number and alphabet characters\n");
-  //   //   continue;
-  //   // }
-  //   sin_size = sizeof(struct sockaddr);
-  //   bytes_sent = send(client_sock, buff, strlen(buff), 0);
-  //   if (bytes_sent < 0)
-  //   {
-  //     perror("Error: ");
-  //     close(client_sock);
-  //     return 0;
-  //   }
-  // }
-  loginpage();
-  gtk_main();
-}
-
-void *recvThread(void *arg)
-{
-  while (1)
-  {
-    memset(buff, '\0', (strlen(buff) + 1));
-    bytes_received = recv(client_sock, buff, BUFF_SIZE - 1, 0);
-    printf("%s\n", buff);
-    if (bytes_received < 0)
-    {
-      perror("Error: ");
-      close(client_sock);
-      return 0;
-    }
-    char MSGtype[10];
-    int MSGT = -1;
-    for(int i = 0; i < 6; i++){
-      MSGtype[i] = buff[i];
-    }
-    MSGtype[6] = '\0';
-    for(int i = 0; i< sizeof(MSGS); i++){
-      if(strcmp(MSGS[i], MSGtype) == 0){
-        MSGT = i;
-        break;
-      }
-    }
-    printf("MSG Type: %d\n", MSGT);
-    switch (MSGT)
-    {
-    case 0:
-      /* code */
-      notifyLabel = GTK_WIDGET(gtk_builder_get_object(builderLogin, "notifyLabel"));
-      switch (buff[7])
-      {
-      case '0':
-        /* code */
-        gtk_label_set_text(GTK_LABEL(notifyLabel), "Tài khoản bị khóa");
-        break;
-      case '1':
-        /* code */
-        gtk_label_set_text(GTK_LABEL(notifyLabel), "Đăng nhập thành công");
-        char cELO[1000];
-        memset(cELO, '\0', sizeof(cELO));
-        for(int i = 9;i<strlen(buff);i++){
-          if(buff[i] == '#'){
-            i++;
-            int k = i;
-            for(;i<strlen(buff); i++){
-              cELO[i-k] = buff[i]; 
-            }
-          }
+  int timeOut = 0;
+  switch (MSGType){
+    case 0:{
+      timeOut = 0;
+      switch (account.recv_buff[7]){
+        case '0':{
+          gtk_label_set_text(GTK_LABEL(notifyLabel), "Tài khoản bị khóa");
+          break;
         }
-        int k = atoi(cELO);
-        account->ELO = k;
-        printf("ELO: %d\n", account->ELO);
-        printf("%s\n%s\n%d", account->name, account->password, account->ELO);
-        gtk_widget_hide(GTK_WIDGET(WindowLogin));
-        setupHome();
-        gtk_label_set_text(GTK_LABEL(usernameData), account->name);
-        gtk_label_set_text(GTK_LABEL(ELOData), cELO);
-        printf("stop\n");
-        gtk_widget_show(GTK_WIDGET(WindowHome));
-        break;
-      case '2':
-        /* code */
-        printf("???\n");
-        gtk_label_set_text(GTK_LABEL(notifyLabel), "Tài khoản đã được đăng nhập ở nơi khác");
-        break;
-      case '3':
-        /* code */
-        notifyLabel = GTK_WIDGET(gtk_builder_get_object(builderHome, "notifyLabel"));
-        gtk_label_set_text(GTK_LABEL(notifyLabel), "Sai tài khoản hoặc mật khẩu");
-        break;
-      default:
-        break;
+        case '1':{
+          char cELO[STR_SIZE];
+          memset(cELO, '\0', STR_SIZE);
+          for(int i = 9;i<strlen(account.recv_buff);i++){
+            cELO[i-9] = account.recv_buff[i]; 
+          }
+          account.elo = atoi(cELO);
+          setupHome();
+          gtk_label_set_text(GTK_LABEL(usernameData), account.name);
+          gtk_label_set_text(GTK_LABEL(ELOData), cELO);
+          break;
+        }
+        case '2':{
+          gtk_label_set_text(GTK_LABEL(notifyLabel), "Tài khoản đã được đăng nhập ở nơi khác");
+          break;
+        }
+        case '3':{
+          gtk_label_set_text(GTK_LABEL(notifyLabel), "Sai tài khoản hoặc mật khẩu");
+          break;
+        }
+        default:{
+          break;
+        }
       }
       break;
-    case 1:
-      /* code */
-      memset(buff, '\0', sizeof(buff));
-			sprintf(buff, "MSGC02#%s", account->name);
-      bytes_sent = send(account->conn_sock , buff, BUFF_SIZE-1, 0);
+    }
+    case 1:{
+      timeOut = 0;
+      if(account.recv_buff[7] == '1'){
+        memset(account.name, '\0',BUFF_SIZE);
+        memset(account.password, '\0', BUFF_SIZE);
+        account.elo = 0;
+        setupLogin();
+      }
       break;
-    case 2:
-      /* code */
+    }
+    case 2:{
+      timeOut = 0;
+      if(account.recv_buff[7] == '0'){
+        gtk_label_set_text(GTK_LABEL(notifyLabel), "Đăng ký không thành công");
+      }
+      else{
+        gtk_label_set_text(GTK_LABEL(notifyLabel), "Đăng  ký thành công");
+      }
       break;
-    case 3:
-      /* code */
+    }
+    case 3:{
+      setupPlayscreen();
+      int temp = 7;
+      printf("???1\n");
+      memset(gameInfo.P1Name, '\0', STR_SIZE);
+      for(int i = temp; i<strlen(account.recv_buff); i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        gameInfo.P1Name[i-temp] = account.recv_buff[i];
+      }
+      printf("???2\n");
+      memset(gameInfo.P2Name, '\0', STR_SIZE);
+      for(int i = temp; i<strlen(account.recv_buff); i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        gameInfo.P2Name[i-temp] = account.recv_buff[i];
+      }
+      printf("???3\n");
+      char Row[10];
+      memset(Row, '\0', 10);
+      for(int i = temp; i<strlen(account.recv_buff); i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        Row[i-temp] = account.recv_buff[i];
+      }
+      gameInfo.quiz.row = atoi(Row);
+      char Collum[10];
+      printf("???4\n");
+      memset(Collum, '\0', 10);
+      for(int i = temp; i<strlen(account.recv_buff); i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        Collum[i-temp] = account.recv_buff[i];
+      }
+      printf("???5\n");
+      gameInfo.quiz.collum = atoi(Collum);
+      memset(gameInfo.quiz.colHints, '\0', SENTENCE_SIZE);
+      for(int i = temp; i<strlen(account.recv_buff); i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        gameInfo.quiz.colHints[i-temp] = account.recv_buff[i];
+      }
       break;
-    case 4:
-      /* code */
+    }
+    case 4:{
+      timeOut = 0;
       break;
-    case 5:
-      /* code */
+    }
+    case 5:{
+      timeOut = 0;
       break;
-    case 6:
-      /* code */
+    }
+    case 6:{
+      timeOut = 0;
       break;
-    case 7:
-      /* code */
+    }
+    case 7:{
+      timeOut = 0;
       break;
-    case 8:
-      /* code */
+    }
+    case 8:{
+      timeOut = 0;
       break;
-    case 9:
-      /* code */
+    }
+    case 9:{
+      timeOut = 0;
       break;
-    case 10:
-      /* code */
+    }
+    case 10:{
+      timeOut = 0;
       break;
-    case 11:
-      /* code */
+    }
+    case 11:{
+      timeOut = 0;
+      int temp = 7;
+      int row, spacing, length;
+      char Row[10];
+      memset(Row, '\0', 10);
+      for(int i = temp; i <strlen(account.recv_buff) ; i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        Row[i-temp] = account.recv_buff[i];
+      }
+      row = atoi(Row);
+      char Spacing[10];
+      memset(Spacing, '\0', 10);
+      for(int i = temp; i <strlen(account.recv_buff) ; i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        Spacing[i-temp] = account.recv_buff[i];
+      }
+      spacing = atoi(Spacing);
+      gameInfo.quiz.rowData[row].spacing = spacing;
+      char Length[10];
+      memset(Length, '\0', 10);
+      for(int i = temp; i <strlen(account.recv_buff) ; i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        Length[i-temp] = account.recv_buff[i];
+      }
+      length = atoi(Length);
+      gameInfo.quiz.rowData[row].length = length;
+      memset(gameInfo.quiz.rowData[row].rowAnswer, '\0', STR_SIZE);
+      for(int i = temp; i <strlen(account.recv_buff) ; i++){
+        if(account.recv_buff[i] == '#'){
+          i++;
+          temp = i;
+          break;
+        }
+        gameInfo.quiz.rowData[row].rowAnswer[i-temp] = account.recv_buff[i];
+      }
+      if(row == gameInfo.quiz.row-1){
+        printf("ended\n");
+      }
       break;
+    }
+    case 12:{
+      timeOut = 0;
+      Logging inActiveList[BACKLOG];
+      int listNumber;
+      int temp = 7;
+      for(listNumber = 0; listNumber<BACKLOG; listNumber++){
+        if(temp>=strlen(account.recv_buff)) break;
+        memset(inActiveList[listNumber].name, '\0', STR_SIZE);
+        for(int i = temp; i<strlen(account.recv_buff); i++){
+          if(account.recv_buff[i] == '#'){
+            i++;
+            temp = i;
+            break;
+          }
+          inActiveList[listNumber].name[i-temp] = account.recv_buff[i];
+        }
+        char cELO[STR_SIZE];
+        memset(cELO, '\0', STR_SIZE);
+        for(int i = temp; i<strlen(account.recv_buff); i++){
+          if(account.recv_buff[i] == '#'){
+            i++;
+            temp = i;
+            break;
+          }
+          cELO[i-temp] = account.recv_buff[i];
+        }
+        inActiveList[listNumber].elo = atoi(cELO);
+
+        printf("%d\n", listNumber);
+      }
+      setupInActive();
+      GList *children, *iter;
+
+      // Lấy danh sách các phần tử con trong GtkGrid
+      children = gtk_container_get_children(GTK_CONTAINER(gridTable));
+
+      // Lặp qua danh sách và xóa từng phần tử con
+      for (iter = children; iter != NULL; iter = g_list_next(iter)) {
+          gtk_widget_destroy(GTK_WIDGET(iter->data));
+      }
+
+      // Giải phóng danh sách
+      g_list_free(children);
+
+
+      GtkWidget *name_label = gtk_label_new("Player Name");
+      GtkWidget *elo_label = gtk_label_new("Elo");
+      gtk_grid_attach(GTK_GRID(gridTable), name_label, 0, 0, 1, 1);
+      gtk_grid_attach(GTK_GRID(gridTable), elo_label, 1, 0, 1, 1);
+      gtk_widget_show(name_label);
+      gtk_widget_show(elo_label);
+      for (int i = 0; i < listNumber; i++) {
+          GtkWidget *name_entry = gtk_label_new(inActiveList[i].name);
+          GtkWidget *elo_entry = gtk_label_new(g_strdup_printf("%d", inActiveList[i].elo));
+          GtkWidget *challenge_button = gtk_button_new_with_label("Challenge");
+          g_signal_connect(challenge_button, "clicked", G_CALLBACK(on_challengeButton_clicked), (gpointer)inActiveList[i].name);
+          
+          gtk_grid_attach(GTK_GRID(gridTable), name_entry, 0, i+1, 1, 1);
+          gtk_grid_attach(GTK_GRID(gridTable), elo_entry, 1, i+1, 1, 1);
+          gtk_grid_attach(GTK_GRID(gridTable), challenge_button, 2, i+1, 1, 1);
+          gtk_widget_show(name_entry);
+          gtk_widget_show(elo_entry);
+          gtk_widget_show(challenge_button);
+      }
+      
+      break;
+    }
     
-    default:
+    default:{
+      timeOut++;
       break;
     }
-    // printf("%s\n", buff);
-    // if (buff[0] == 'G')
-    // {
-    //   close(client_sock);
-    //   exit(0);
-    // }
   }
+  return FALSE;
 }
 
-void on_loginButton_clicked(GtkButton *button, gpointer user_data) {
-    char username[100], password[100];
-    usernameEntry = GTK_WIDGET(gtk_builder_get_object(builderLogin, "usernameEntry"));
-    passwordEntry = GTK_WIDGET(gtk_builder_get_object(builderLogin, "passwordEntry"));
-    strcpy(username, gtk_entry_get_text(GTK_ENTRY(usernameEntry)));
-    strcpy(password, gtk_entry_get_text(GTK_ENTRY(passwordEntry)));
-    memset(buff, '\0', (strlen(buff) + 1));
-    fflush(stdout);
-    strcpy(buff, "MSGC01#");
-    strcat(buff, username);
-    strcat(buff, "#");
-    strcat(buff, password);
-    bytes_sent = send(client_sock, buff, BUFF_SIZE-1, 0);
-    if (bytes_sent < 0)
-    {
-      perror("Error: ");
-      close(client_sock);
-      return 0;
-    }
-    strcpy(account->name, username);
-    strcpy(account->password, password);
-}
-
-void on_signupButton_clicked(){}
-void switch_to_signup(GtkButton *button, gpointer user_data) {
-  gtk_widget_hide(GTK_WIDGET(WindowLogin)); // Hide the login window
-  setupSignup();
-  gtk_widget_show(GTK_WIDGET(WindowSignup)); // Show the signup window
-}
-void switch_to_login(GtkButton *button, gpointer user_data) {
-  gtk_widget_hide(GTK_WIDGET(WindowSignup)); // Hide the signup window
-  setupLogin();
-  gtk_widget_show(GTK_WIDGET(WindowLogin)); // Show the login window
-}
-
-void findGame(){}
-void findActive(){}
-void signout(){
-  memset(buff, '\0', sizeof(buff));
-	sprintf(buff, "MSGC02#%s", account->name);
-  bytes_sent = send(account->conn_sock, buff, BUFF_SIZE-1, 0);
-  strcpy(account->name, "");
-  strcpy(account->password, "");
-  account->conn_sock = 0;
-  account->ELO = 0;
-  gtk_widget_hide(GTK_WIDGET(WindowHome));
-  setupLogin();
-  gtk_widget_show(GTK_WIDGET(WindowLogin));
-}
-void setupLogin(){
-  WindowLogin = GTK_WIDGET(gtk_builder_get_object(builderLogin, "window"));
-  usernameLabel = GTK_WIDGET(gtk_builder_get_object(builderLogin, "usernameLabel"));
-  passwordLabel = GTK_WIDGET(gtk_builder_get_object(builderLogin, "passwordLabel"));
-  usernameEntry = GTK_WIDGET(gtk_builder_get_object(builderLogin, "usernameEntry"));
-  passwordEntry = GTK_WIDGET(gtk_builder_get_object(builderLogin, "passwordEntry"));
-  loginButton = GTK_WIDGET(gtk_builder_get_object(builderLogin, "loginButton"));
-  signupButton = GTK_WIDGET(gtk_builder_get_object(builderLogin, "signupButton"));
-  g_signal_connect(loginButton, "clicked", G_CALLBACK(on_loginButton_clicked), NULL);
-  g_signal_connect(signupButton, "clicked", G_CALLBACK(switch_to_signup), NULL);
-  g_signal_connect(WindowLogin, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-}
-void setupSignup(){
-  WindowSignup = GTK_WIDGET(gtk_builder_get_object(builderSignup, "window"));
-  usernameLabel = GTK_WIDGET(gtk_builder_get_object(builderSignup, "usernameLabel"));
-  passwordLabel = GTK_WIDGET(gtk_builder_get_object(builderSignup, "passwordLabel"));
-  resignPasswordLabel = GTK_WIDGET(gtk_builder_get_object(builderSignup, "resignPasswordLabel"));
-  usernameEntry = GTK_WIDGET(gtk_builder_get_object(builderSignup, "usernameEntry"));
-  passwordEntry = GTK_WIDGET(gtk_builder_get_object(builderSignup, "passwordEntry"));
-  resignPasswordEntry = GTK_WIDGET(gtk_builder_get_object(builderSignup, "resignPasswordEntry"));
-  loginButton = GTK_WIDGET(gtk_builder_get_object(builderSignup, "loginButton"));
-  signupButton = GTK_WIDGET(gtk_builder_get_object(builderSignup, "signupButton"));
-  g_signal_connect(loginButton, "clicked", G_CALLBACK(on_signupButton_clicked), NULL);
-  g_signal_connect(signupButton, "clicked", G_CALLBACK(switch_to_login), NULL);
-  g_signal_connect(WindowLogin, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-}
-void setupHome(){
-  WindowHome = GTK_WIDGET(gtk_builder_get_object(builderHome, "window"));
-  usernameData = GTK_WIDGET(gtk_builder_get_object(builderHome, "usernameData"));
-  ELOData = GTK_WIDGET(gtk_builder_get_object(builderHome, "ELOData"));
-  findGameButton = GTK_WIDGET(gtk_builder_get_object(builderHome, "findGameButton"));
-  findActiveButton = GTK_WIDGET(gtk_builder_get_object(builderHome, "findActiveButton"));
-  logoutButton = GTK_WIDGET(gtk_builder_get_object(builderHome, "logoutButton"));
-  g_signal_connect(findGameButton, "clicked", G_CALLBACK(findGame), NULL);
-  g_signal_connect(findActiveButton, "clicked", G_CALLBACK(findActive), NULL);
-  g_signal_connect(logoutButton, "clicked", G_CALLBACK(signout), NULL);
-  g_signal_connect(WindowHome, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-}
-void *waitingChallenge(void *inp){
-  int tid = *((int *)inp);
-  while (1)
-  {
-    if(isChallenged == 1){
-      // pop up có thách đấu
-      builderChallengePopup = gtk_builder_new();
-      gtk_builder_add_from_file(builderChallengePopup, "challengePopup.glade", NULL);
-      g_signal_connect(WindowLogin, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-      gtk_widget_show(GTK_WIDGET(WindowChallengePopup)); // Show the login window
-      isChallenged = 0;
-    }
+void* GUI_thread(void* data) {
+  pthread_detach(pthread_self());
+  while (1){
+    memset(account.recv_buff, '\0', BUFF_SIZE);
+    bytes_received = recv(account.conn_sock, account.recv_buff, BUFF_SIZE, 0);
+    g_idle_add(handle_GUI, data);
+    sleep(1);
   }
-}
-void loginpage(){
-  setupLogin();
-  gtk_widget_show(WindowLogin);
+  return NULL;
 }
 
-int main(int argc, char *argv[])
-{
-  account = (Account *)malloc(sizeof(Account));
-  if (argc != 3)
-  {
+int main(int argc, char *argv[]){
+  currentScreen = -1;
+  int client_sock;
+  if (argc != 3){
     fprintf(stdout, "Please enter required argument\n");
     return 0;
   }
   SERV_PORT = atoi(argv[2]);
   strcpy(SERV_IP, argv[1]);
-  
-  gtk_init(NULL, NULL);
-  builderLogin = gtk_builder_new();
-  gtk_builder_add_from_file(builderLogin, "login.glade", NULL);
-  builderSignup = gtk_builder_new();
-  gtk_builder_add_from_file(builderSignup, "Signup.glade", NULL);
-  builderHome = gtk_builder_new();
-  gtk_builder_add_from_file(builderHome, "Home.glade", NULL);
-  builderPlayscreen = gtk_builder_new();
-  gtk_builder_add_from_file(builderPlayscreen, "Playscreen.glade", NULL);
 
   // Step 1: Construct a TCP socket
   client_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -371,19 +333,24 @@ int main(int argc, char *argv[])
     printf("\nError!Can not connect to sever! Client exit imediately! ");
     return 0;
   }
-  account->conn_sock = client_sock;
-  pthread_t challengeThread;
-  pthread_create(&challengeThread, NULL, waitingChallenge, &client_sock);
-  pthread_t sendThreadID;
-  pthread_t recvThreadID;
-
-  pthread_create(&sendThreadID, NULL, sendThread, &client_sock);
-  pthread_create(&recvThreadID, NULL, recvThread, &client_sock);
-
-  pthread_join(sendThreadID, NULL);
-  pthread_join(recvThreadID, NULL);
-
-  loginpage();
+  account.conn_sock = client_sock;
+  
+  gtk_init(NULL, NULL);
+  builderLogin = gtk_builder_new();
+  gtk_builder_add_from_file(builderLogin, "Login.glade", NULL);
+  builderSignup = gtk_builder_new();
+  gtk_builder_add_from_file(builderSignup, "Signup.glade", NULL);
+  builderHome = gtk_builder_new();
+  gtk_builder_add_from_file(builderHome, "Home.glade", NULL);
+  builderPlayscreen = gtk_builder_new();
+  gtk_builder_add_from_file(builderPlayscreen, "Playscreen.glade", NULL);
+  builderInActive = gtk_builder_new();
+  gtk_builder_add_from_file(builderInActive, "inActive.glade", NULL);
+  builderChallengePopup = gtk_builder_new();
+  gtk_builder_add_from_file(builderChallengePopup, "challengePopup.glade", NULL);
+  setupLogin();
+  printf("Socket%d\n", account.conn_sock);
+  pthread_t thread_id;
+  pthread_create(&thread_id, NULL, GUI_thread, NULL);
   gtk_main();
-  pthread_join(challengeThread, NULL);
 }

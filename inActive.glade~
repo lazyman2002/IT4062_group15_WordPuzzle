@@ -53,19 +53,9 @@
           </packing>
         </child>
         <child>
-          <!-- n-columns=3 n-rows=1 -->
-          <object class="GtkGrid" id="gridTable">
+          <object class="GtkListBox" id="listBox">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
           </object>
           <packing>
             <property name="left-attach">0</property>
